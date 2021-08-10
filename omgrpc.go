@@ -9,7 +9,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// ServerMetrics defines common gRPC server metrics bundle.
+// ServerMetrics defines gRPC server metrics bundle.
 type ServerMetrics interface {
 	// RequestCount should return counter which accepts 2 labels:
 	// full gRPC method name (like "/package.service/method")
@@ -22,24 +22,9 @@ type ServerMetrics interface {
 	RequestDuration() openmetrics.HistogramFamily
 }
 
-// UnaryServerMetrics defines gRPC unary server metrics bundle.
-type UnaryServerMetrics interface {
-	ServerMetrics
-
-	// can be extended later
-}
-
-// StreamServerMetrics defines gRPC stream server metrics bundle.
-type StreamServerMetrics interface {
-	ServerMetrics
-
-	// can be extended later
-}
-
 // ----------------------------------------------------------------------------
 
-var _ UnaryServerMetrics = (*DefaultServerMetrics)(nil)
-var _ StreamServerMetrics = (*DefaultServerMetrics)(nil)
+var _ ServerMetrics = (*DefaultServerMetrics)(nil)
 
 // DefaultServerMetrics provides both UnaryServerMetrics and StreamServerMetrics.
 type DefaultServerMetrics struct {
@@ -47,9 +32,7 @@ type DefaultServerMetrics struct {
 	requestDuration openmetrics.HistogramFamily
 }
 
-// NewDefaultServerMetrics builds metrics bundle with the following metrics/labels:
-//   "grpc_request" counter with labels "full_method" and "status"
-//   "grpc_request" histogram (request duration) with labels "full_method" and "status" and bounds: .1, .2, 0.5, 1
+// NewDefaultServerMetrics builds default/common metrics bundle.
 func NewDefaultServerMetrics(reg openmetrics.Registry) *DefaultServerMetrics {
 	return &DefaultServerMetrics{
 		requestCount: reg.Counter(openmetrics.Desc{
@@ -64,10 +47,12 @@ func NewDefaultServerMetrics(reg openmetrics.Registry) *DefaultServerMetrics {
 	}
 }
 
+// RequestCount returns "grpc_request" counter with labels "full_method" and "status".
 func (m *DefaultServerMetrics) RequestCount() openmetrics.CounterFamily {
 	return m.requestCount
 }
 
+// RequestDuration returns "grpc_request" histogram (request duration) with labels "full_method" and "status" and bounds: .1, .2, 0.5, 1.
 func (m *DefaultServerMetrics) RequestDuration() openmetrics.HistogramFamily {
 	return m.requestDuration
 }
@@ -75,7 +60,7 @@ func (m *DefaultServerMetrics) RequestDuration() openmetrics.HistogramFamily {
 // ----------------------------------------------------------------------------
 
 // UnaryServer builds an unary server interceptor.
-func UnaryServer(metrics UnaryServerMetrics) grpc.UnaryServerInterceptor {
+func UnaryServer(metrics ServerMetrics) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		started := time.Now()
 		resp, err := handler(ctx, req) // TODO: check if gRPC will recover from panics or we should?
@@ -89,7 +74,7 @@ func UnaryServer(metrics UnaryServerMetrics) grpc.UnaryServerInterceptor {
 }
 
 // StreamServer builds a streaming server interceptor.
-func StreamServer(metrics StreamServerMetrics) grpc.StreamServerInterceptor {
+func StreamServer(metrics ServerMetrics) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		started := time.Now()
 		// Note: stream can be monitored for msgs recved/sent as well, see:
