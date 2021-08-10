@@ -59,11 +59,11 @@ func (m *DefaultServerMetrics) RequestDuration() openmetrics.HistogramFamily {
 
 // ----------------------------------------------------------------------------
 
-// UnaryServer builds an unary server interceptor.
-func UnaryServer(metrics ServerMetrics) grpc.UnaryServerInterceptor {
+// NewUnaryServerInterceptor builds an unary server interceptor.
+func NewUnaryServerInterceptor(metrics ServerMetrics) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
 		started := time.Now()
-		resp, err := handler(ctx, req) // TODO: check if gRPC will recover from panics or we should?
+		resp, err := handler(ctx, req) // Note: no panic recovery, use own or third-party recoverers
 		statusLabel := status.Code(err).String()
 
 		metrics.RequestDuration().With(info.FullMethod, statusLabel).Observe(time.Since(started).Seconds())
@@ -73,13 +73,13 @@ func UnaryServer(metrics ServerMetrics) grpc.UnaryServerInterceptor {
 	}
 }
 
-// StreamServer builds a streaming server interceptor.
-func StreamServer(metrics ServerMetrics) grpc.StreamServerInterceptor {
+// NewStreamServerInterceptor builds a streaming server interceptor.
+func NewStreamServerInterceptor(metrics ServerMetrics) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 		started := time.Now()
 		// Note: stream can be monitored for msgs recved/sent as well, see:
 		// https://github.com/piotrkowalczuk/promgrpc/blob/d34dd04b874a678ba14e884abb6b1b1b1701070b/prometheus.go#L533-L553
-		err := handler(srv, ss) // TODO: check if gRPC will recover from panics or we should?
+		err := handler(srv, ss) // Note: no panic recovery, use own or third-party recoverers
 		statusLabel := status.Code(err).String()
 
 		metrics.RequestDuration().With(info.FullMethod, statusLabel).Observe(time.Since(started).Seconds())
