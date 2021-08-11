@@ -1,0 +1,12 @@
+syntax = "proto3";
+package com.blacksquaremedia.omgrpc.internal.testpb;
+option go_package = "github.com/bsm/omgrpc/internal/testpb";
+
+service Test {
+  rpc Unary(Message) returns (Message) {}
+  rpc Stream(stream Message) returns (stream Message) {}
+}
+
+message Message {
+  string Payload = 1;
+}

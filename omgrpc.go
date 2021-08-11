@@ -2,89 +2,87 @@ package omgrpc
 
 import (
 	"context"
-	"time"
+	"fmt"
+	"os"
 
-	"github.com/bsm/openmetrics"
-	"google.golang.org/grpc"
+	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 )
 
-// ServerMetrics defines gRPC server metrics bundle.
-type ServerMetrics interface {
-	// RequestCount should return counter which accepts 2 labels:
-	// full gRPC method name (like "/package.service/method")
-	// and gRPC status label (like "OK" or "Unknown" - see https://pkg.go.dev/google.golang.org/grpc/codes)
-	RequestCount() openmetrics.CounterFamily
+// StatsHandler is a https://pkg.go.dev/google.golang.org/grpc/stats#Handler implementation.
+type StatsHandler struct {
+	// all nullable/optional
 
-	// RequestCount should return histogram which accepts 2 labels:
-	// full gRPC method name (like "/package.service/method")
-	// and gRPC status label (like "OK" or "Unknown" - see https://pkg.go.dev/google.golang.org/grpc/codes)
-	RequestDuration() openmetrics.HistogramFamily
+	// RecordTransferSize func(sz int, dir Direction(In/Out), when Lifecycle(Header/Payload/Trailer))
+	// RecordRequest func(fullMethod string, status *grpc/status.Status, elapsed time.Duration)
+	// RecordConnection func(increment int)
 }
 
-// ----------------------------------------------------------------------------
+// to have something default:
+// func NewDefaultStatsHandler(reg openmetrics.Registry) *StatsHandler { ... }
 
-var _ ServerMetrics = (*DefaultServerMetrics)(nil)
-
-// DefaultServerMetrics provides both UnaryServerMetrics and StreamServerMetrics.
-type DefaultServerMetrics struct {
-	requestCount    openmetrics.CounterFamily
-	requestDuration openmetrics.HistogramFamily
+// TagRPC can attach some information to the given context.
+// The context used for the rest lifetime of the RPC will be derived from
+// the returned context.
+func (h *StatsHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context {
+	// this method is called before HandleRPC
+	// and it seems to be impossible to extract full method from Unary ctx,
+	// so "remember" it here:
+	return setContextMethod(ctx, info.FullMethodName)
 }
 
-// NewDefaultServerMetrics builds default/common metrics bundle.
-func NewDefaultServerMetrics(reg openmetrics.Registry) *DefaultServerMetrics {
-	return &DefaultServerMetrics{
-		requestCount: reg.Counter(openmetrics.Desc{
-			Name:   "grpc_requests",
-			Labels: []string{"full_method", "status"},
-		}),
-		requestDuration: reg.Histogram(openmetrics.Desc{
-			Name:   "grpc_requests",
-			Unit:   "seconds",
-			Labels: []string{"full_method", "status"},
-		}, []float64{.1, .2, 0.5, 1}),
+// HandleRPC processes the RPC stats.
+func (h *StatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
+	// we handle almost all the RPCStats types, so better simplify code a bit and extract method before switch:
+	method := getContextMethod(ctx)
+
+	switch s := stat.(type) {
+
+	// grpc/stats says that WireLength are all "compressed, signed, encrypted" data size
+	// just Length is not that interesting really (that's raw data length).
+
+	case *stats.InHeader:
+		fmt.Fprintf(os.Stderr, "- transfer size: method=%s, wire_length=%d, when=%T\n", method, s.WireLength, s)
+
+	case *stats.InPayload:
+		fmt.Fprintf(os.Stderr, "- transfer size: method=%s, wire_length=%d, when=%T\n", method, s.WireLength, s)
+
+	case *stats.InTrailer:
+		fmt.Fprintf(os.Stderr, "- transfer size: method=%s, wire_length=%d, when=%T\n", method, s.WireLength, s)
+
+	// case *stats.OutHeader: // no WireLength/Length data provided
+
+	case *stats.OutPayload:
+		fmt.Fprintf(os.Stderr, "- transfer size: method=%s, wire_length=%d, when=%T\n", method, s.WireLength, s)
+
+	// case *stats.OutTrailer: // WireLength is deprecated here
+
+	case *stats.End:
+		elapsed := s.EndTime.Sub(s.BeginTime)
+		status, _ := status.FromError(s.Error) // can return Unknown status, but never nil
+
+		fmt.Fprintf(os.Stderr, "- request timing: method=%s, elapsed=%f, status=%s\n", method, elapsed.Seconds(), status.Code().String())
 	}
 }
 
-// RequestCount returns "grpc_request" counter with labels "full_method" and "status".
-func (m *DefaultServerMetrics) RequestCount() openmetrics.CounterFamily {
-	return m.requestCount
+// TagConn can attach some information to the given context.
+// The returned context will be used for stats handling.
+// For conn stats handling, the context used in HandleConn for this
+// connection will be derived from the context returned.
+// For RPC stats handling,
+//  - On server side, the context used in HandleRPC for all RPCs on this
+// connection will be derived from the context returned.
+//  - On client side, the context is not derived from the context returned.
+func (h *StatsHandler) TagConn(ctx context.Context, info *stats.ConnTagInfo) context.Context {
+	return ctx
 }
 
-// RequestDuration returns "grpc_request" histogram (request duration) with labels "full_method" and "status" and bounds: .1, .2, 0.5, 1.
-func (m *DefaultServerMetrics) RequestDuration() openmetrics.HistogramFamily {
-	return m.requestDuration
-}
-
-// ----------------------------------------------------------------------------
-
-// NewUnaryServerInterceptor builds an unary server interceptor.
-func NewUnaryServerInterceptor(metrics ServerMetrics) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-		started := time.Now()
-		resp, err := handler(ctx, req) // Note: no panic recovery, use own or third-party recoverers
-		statusLabel := status.Code(err).String()
-
-		metrics.RequestDuration().With(info.FullMethod, statusLabel).Observe(time.Since(started).Seconds())
-		metrics.RequestCount().With(info.FullMethod, statusLabel).Add(1)
-
-		return resp, err
-	}
-}
-
-// NewStreamServerInterceptor builds a streaming server interceptor.
-func NewStreamServerInterceptor(metrics ServerMetrics) grpc.StreamServerInterceptor {
-	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		started := time.Now()
-		// Note: stream can be monitored for msgs recved/sent as well, see:
-		// https://github.com/piotrkowalczuk/promgrpc/blob/d34dd04b874a678ba14e884abb6b1b1b1701070b/prometheus.go#L533-L553
-		err := handler(srv, ss) // Note: no panic recovery, use own or third-party recoverers
-		statusLabel := status.Code(err).String()
-
-		metrics.RequestDuration().With(info.FullMethod, statusLabel).Observe(time.Since(started).Seconds())
-		metrics.RequestCount().With(info.FullMethod, statusLabel).Add(1)
-
-		return err
+// HandleConn processes the Conn stats.
+func (h *StatsHandler) HandleConn(ctx context.Context, stat stats.ConnStats) {
+	switch stat.(type) {
+	case *stats.ConnBegin:
+		fmt.Fprintf(os.Stderr, "- connection: +1\n")
+	case *stats.ConnEnd:
+		fmt.Fprintf(os.Stderr, "- connection: -1\n")
 	}
 }
