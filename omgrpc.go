@@ -13,9 +13,9 @@ import (
 type StatsHandler struct {
 	// all nullable/optional
 
-	// RecordTransferSize func(sz int, dir Direction(In/Out), when Lifecycle(Header/Payload/Trailer))
-	// RecordRequest func(fullMethod string, status *grpc/status.Status, elapsed time.Duration)
-	// RecordConnection func(increment int)
+	// OnData func(sz int, dir Direction(In/Out), when Lifecycle(Header/Payload/Trailer))
+	// OnRequest func(fullMethod string, status *grpc/status.Status, elapsed time.Duration)
+	// OnConnect func(increment int)
 }
 
 // to have something default:
