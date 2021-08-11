@@ -2,18 +2,45 @@ package omgrpc
 
 import (
 	"context"
-	"fmt"
-	"os"
+	"time"
 
 	"google.golang.org/grpc/stats"
-	"google.golang.org/grpc/status"
+)
+
+// DataDirection defines data direction as seen by gRPC peer (either Client or Server).
+type DataDirection string
+
+const (
+	DirectionIn  DataDirection = "in"
+	DirectionOut DataDirection = "out"
+)
+
+// DataPhase defines when data transfer occurs.
+type DataPhase string
+
+const (
+	PhaseHeader  DataPhase = "header"
+	PhasePayload DataPhase = "payload"
+	PhaseTrailer DataPhase = "trailer"
 )
 
 // StatsHandler is a https://pkg.go.dev/google.golang.org/grpc/stats#Handler implementation.
+//
+// All the properties/callbacks are optional.
 type StatsHandler struct {
-	// OnData func(sz int, dir Direction(In/Out), when Lifecycle(Header/Payload/Trailer))
-	// OnRequest func(fullMethod string, status *grpc/status.Status, elapsed time.Duration)
-	// OnConnect func(increment int)
+	// OnData runs when data transfer event occurs.
+	// Size argument is a compressed, signed and encrypted data size,
+	// just like what is transferred over the network.
+	OnData func(fullMethod string, phase DataPhase, dir DataDirection, size int)
+
+	// OnCall runs when RPC call is served.
+	// It is provided with a (nil-able) handler error,
+	// which can be examined further with e.g. grpc/status.FromError(err).Code().
+	OnCall func(fullMethod string, err error, elapsed time.Duration)
+
+	// OnConn runs when connections are made (positive increment)
+	// or when connections are closed (negative increment).
+	OnConn func(increment int)
 }
 
 // to have something default:
@@ -38,26 +65,24 @@ func (h *StatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
 	// just Length is not that informative, it's a raw data size.
 
 	case *stats.InHeader:
-		fmt.Fprintf(os.Stderr, "- transfer size: method=%s, wire_length=%d, when=%T\n", method, s.WireLength, s)
+		h.onData(method, PhaseHeader, DirectionIn, s.WireLength)
 
 	case *stats.InPayload:
-		fmt.Fprintf(os.Stderr, "- transfer size: method=%s, wire_length=%d, when=%T\n", method, s.WireLength, s)
+		h.onData(method, PhasePayload, DirectionIn, s.WireLength)
 
 	case *stats.InTrailer:
-		fmt.Fprintf(os.Stderr, "- transfer size: method=%s, wire_length=%d, when=%T\n", method, s.WireLength, s)
+		h.onData(method, PhaseTrailer, DirectionIn, s.WireLength)
 
 	// case *stats.OutHeader: // no WireLength/Length data provided
 
 	case *stats.OutPayload:
-		fmt.Fprintf(os.Stderr, "- transfer size: method=%s, wire_length=%d, when=%T\n", method, s.WireLength, s)
+		h.onData(method, PhasePayload, DirectionOut, s.WireLength)
 
 	// case *stats.OutTrailer: // WireLength is deprecated here
 
 	case *stats.End:
 		elapsed := s.EndTime.Sub(s.BeginTime)
-		status, _ := status.FromError(s.Error) // can return Unknown status, but never nil
-
-		fmt.Fprintf(os.Stderr, "- request timing: method=%s, elapsed=%f, status=%s\n", method, elapsed.Seconds(), status.Code().String())
+		h.onCall(method, s.Error, elapsed)
 	}
 }
 
@@ -70,8 +95,26 @@ func (h *StatsHandler) TagConn(ctx context.Context, info *stats.ConnTagInfo) con
 func (h *StatsHandler) HandleConn(ctx context.Context, stat stats.ConnStats) {
 	switch stat.(type) {
 	case *stats.ConnBegin:
-		fmt.Fprintf(os.Stderr, "- connection: +1\n")
+		h.onConn(1)
 	case *stats.ConnEnd:
-		fmt.Fprintf(os.Stderr, "- connection: -1\n")
+		h.onConn(-1)
+	}
+}
+
+func (h *StatsHandler) onData(fullMethod string, phase DataPhase, dir DataDirection, size int) {
+	if cb := h.OnData; cb != nil {
+		cb(fullMethod, phase, dir, size)
+	}
+}
+
+func (h *StatsHandler) onCall(fullMethod string, err error, elapsed time.Duration) {
+	if cb := h.OnCall; cb != nil {
+		cb(fullMethod, err, elapsed)
+	}
+}
+
+func (h *StatsHandler) onConn(increment int) {
+	if cb := h.OnConn; cb != nil {
+		cb(increment)
 	}
 }
