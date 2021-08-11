@@ -21,7 +21,6 @@ func TestSuite(t *testing.T) {
 
 var _ = Describe("StatsHandler", func() {
 	var subject *omgrpc.StatsHandler
-	var service *testpb.TestServerImpl
 	var client testpb.TestClient
 	var listener *bufconn.Listener
 	var grpcServer *grpc.Server
@@ -31,7 +30,7 @@ var _ = Describe("StatsHandler", func() {
 
 	BeforeEach(func() {
 		subject = new(omgrpc.StatsHandler)
-		service = &testpb.TestServerImpl{}
+		service := &testpb.TestServerImpl{}
 
 		grpcServer = grpc.NewServer(grpc.StatsHandler(subject))
 		testpb.RegisterTestServer(grpcServer, service)
