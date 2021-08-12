@@ -112,6 +112,9 @@ func getCallStats(ctx context.Context) *CallStats {
 // It assumes that stats.Handler methods are never called concurrently.
 type CallStatsHandler func(*CallStats)
 
+// TODO: make default call stats handler.
+// func NewDefaultCallStatsHandler(reg openmetrics.Registry) CallStatsHandler
+
 // TagRPC attaches omgrpc-internal data to RPC context.
 func (h CallStatsHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context {
 	// this method is called before HandleRPC, init CallStats at this point:
