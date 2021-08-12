@@ -15,6 +15,10 @@ const (
 	DirectionOut DataDirection = "out"
 )
 
+func (d DataDirection) String() string {
+	return string(d)
+}
+
 // DataPhase defines when data transfer occurs.
 type DataPhase string
 
@@ -23,6 +27,10 @@ const (
 	PhasePayload DataPhase = "payload"
 	PhaseTrailer DataPhase = "trailer"
 )
+
+func (p DataPhase) String() string {
+	return string(p)
+}
 
 // StatsHandler is a https://pkg.go.dev/google.golang.org/grpc/stats#Handler implementation.
 //
