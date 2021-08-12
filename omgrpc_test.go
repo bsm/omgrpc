@@ -21,13 +21,46 @@ func TestSuite(t *testing.T) {
 	RunSpecs(t, "omgrpc")
 }
 
+func initClientServerSystem(clientOptions []grpc.DialOption, serverOptions []grpc.ServerOption) (testpb.TestClient, func()) {
+	server := grpc.NewServer(serverOptions...)
+	testpb.RegisterTestServer(server, new(testpb.TestServerImpl))
+
+	listener := bufconn.Listen(10 * 1024 * 1024 /* 10 MB buf */)
+	go func() {
+		defer GinkgoRecover()
+		_ = server.Serve(listener)
+	}()
+	time.Sleep(100 * time.Millisecond) // give it a bit of time to start serving in background
+
+	dialer := func(context.Context, string) (net.Conn, error) {
+		return listener.Dial()
+	}
+
+	client, err := grpc.Dial(
+		"bufconn",
+		append(
+			[]grpc.DialOption{
+				grpc.WithContextDialer(dialer),
+				grpc.WithInsecure(),
+			},
+			clientOptions..., // overrides defaults if needed
+		)...,
+	)
+	Expect(err).NotTo(HaveOccurred())
+
+	return testpb.NewTestClient(client), func() {
+		_ = client.Close()
+		server.Stop()
+		_ = listener.Close()
+	}
+}
+
+// TODO: kill
 var _ = Describe("StatsHandler", func() {
 	var subject *omgrpc.StatsHandler
 	var calls [][]interface{}
 	var client testpb.TestClient
-	var listener *bufconn.Listener
-	var grpcServer *grpc.Server
-	var grpcClient *grpc.ClientConn
+	var teardown func()
 
 	ctx := context.Background()
 
@@ -48,34 +81,16 @@ var _ = Describe("StatsHandler", func() {
 			},
 		}
 
-		grpcServer = grpc.NewServer(grpc.StatsHandler(subject))
-		testpb.RegisterTestServer(grpcServer, new(testpb.TestServerImpl))
-
-		listener = bufconn.Listen(10 * 1024 * 1024 /* 10 MB buf */)
-		go func() {
-			defer GinkgoRecover()
-			_ = grpcServer.Serve(listener)
-		}()
-		time.Sleep(100 * time.Millisecond) // give it a bit of time to start serving in background
-
-		dialer := func(context.Context, string) (net.Conn, error) { return listener.Dial() }
-
-		var err error
-		grpcClient, err = grpc.Dial(
-			"bufconn",
-			grpc.WithContextDialer(dialer),
-			grpc.WithInsecure(),
-			// grpc.WithStatsHandler(subject) // TODO: implement/test client stats handler as well!
+		client, teardown = initClientServerSystem(
+			[]grpc.DialOption(nil),
+			[]grpc.ServerOption{
+				grpc.StatsHandler(subject),
+			},
 		)
-		Expect(err).NotTo(HaveOccurred())
-
-		client = testpb.NewTestClient(grpcClient)
 	})
 
 	AfterEach(func() {
-		_ = grpcClient.Close()
-		grpcServer.Stop()
-		listener.Close()
+		teardown()
 	})
 
 	It("runs callbacks", func() {
@@ -104,9 +119,6 @@ var _ = Describe("StatsHandler", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(msg.Payload).To(Equal("Stream: 3"))
 
-		Expect(grpcClient.Close()).To(Succeed())
-		time.Sleep(100 * time.Millisecond) // give server some time to process client disconnect
-
 		// to simplify and make it more readable:
 		callsJSON, err := json.MarshalIndent(calls, "", "\t")
 		Expect(err).NotTo(HaveOccurred())
@@ -123,9 +135,7 @@ var _ = Describe("StatsHandler", func() {
 			["OnData", "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream", "payload", "out", 16],
 			["OnData", "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream", "payload", "in",   8],
 			["OnData", "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream", "payload", "out", 16],
-			["OnCall", "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream", null, "1s"],
-
-			["OnConn", -1]
+			["OnCall", "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream", null, "1s"]
 		]`))
 	})
 })
