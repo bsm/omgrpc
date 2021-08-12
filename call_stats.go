@@ -141,11 +141,14 @@ func (h CallStatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
 			call.RemoteAddr = s.RemoteAddr
 			call.LocalAddr = s.LocalAddr
 		}
+		call.InWireLength += s.WireLength
 
 	case *stats.InPayload:
+		call.InWireLength += s.WireLength
 
 	case *stats.InTrailer:
 		call.InTrailer = s.Trailer
+		call.InWireLength += s.WireLength
 
 	case *stats.OutHeader:
 		call.OutHeader = s.Header
@@ -153,11 +156,15 @@ func (h CallStatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
 			call.RemoteAddr = s.RemoteAddr
 			call.LocalAddr = s.LocalAddr
 		}
+		// no WireLength here (at least as of grpc@1.40.0)
 
 	case *stats.OutPayload:
+		call.InWireLength += s.WireLength
+		call.OutWireLength += s.WireLength
 
 	case *stats.OutTrailer:
 		call.OutTrailer = s.Trailer
+		// WireLength is deprecated here
 
 	case *stats.End:
 		call.EndTime = s.EndTime
