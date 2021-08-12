@@ -169,6 +169,7 @@ func (h CallStatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
 	case *stats.End:
 		call.EndTime = s.EndTime
 		call.Error = s.Error
+		h(call) // "submit" collected stats
 
 	}
 }

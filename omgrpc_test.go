@@ -21,7 +21,16 @@ func TestSuite(t *testing.T) {
 	RunSpecs(t, "omgrpc")
 }
 
-func initClientServerSystem(clientOptions []grpc.DialOption, serverOptions []grpc.ServerOption) (testpb.TestClient, func()) {
+func initClientServerSystem(
+	clientOptions []grpc.DialOption,
+	serverOptions []grpc.ServerOption,
+) (
+	testClient testpb.TestClient,
+	clientClose func(),
+	teardown func(),
+) {
+	const serverDelay = 100 * time.Millisecond // allow server to lag behind a bit - to start in background, to process data etc
+
 	server := grpc.NewServer(serverOptions...)
 	testpb.RegisterTestServer(server, new(testpb.TestServerImpl))
 
@@ -30,7 +39,7 @@ func initClientServerSystem(clientOptions []grpc.DialOption, serverOptions []grp
 		defer GinkgoRecover()
 		_ = server.Serve(listener)
 	}()
-	time.Sleep(100 * time.Millisecond) // give it a bit of time to start serving in background
+	time.Sleep(serverDelay) // give it a bit of time to start serving in background
 
 	dialer := func(context.Context, string) (net.Conn, error) {
 		return listener.Dial()
@@ -48,11 +57,18 @@ func initClientServerSystem(clientOptions []grpc.DialOption, serverOptions []grp
 	)
 	Expect(err).NotTo(HaveOccurred())
 
-	return testpb.NewTestClient(client), func() {
+	testClient = testpb.NewTestClient(client)
+	clientClose = func() {
+		client.Close()
+		time.Sleep(serverDelay) // and let server "digest" / submit stats for client disconnect
+	}
+	teardown = func() {
 		_ = client.Close()
 		server.Stop()
 		_ = listener.Close()
 	}
+
+	return testClient, clientClose, teardown
 }
 
 // TODO: kill
@@ -60,6 +76,7 @@ var _ = Describe("StatsHandler", func() {
 	var subject *omgrpc.StatsHandler
 	var calls [][]interface{}
 	var client testpb.TestClient
+	var clientClose func()
 	var teardown func()
 
 	ctx := context.Background()
@@ -81,7 +98,7 @@ var _ = Describe("StatsHandler", func() {
 			},
 		}
 
-		client, teardown = initClientServerSystem(
+		client, clientClose, teardown = initClientServerSystem(
 			[]grpc.DialOption(nil),
 			[]grpc.ServerOption{
 				grpc.StatsHandler(subject),
@@ -119,6 +136,8 @@ var _ = Describe("StatsHandler", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(msg.Payload).To(Equal("Stream: 3"))
 
+		clientClose()
+
 		// to simplify and make it more readable:
 		callsJSON, err := json.MarshalIndent(calls, "", "\t")
 		Expect(err).NotTo(HaveOccurred())
@@ -135,7 +154,9 @@ var _ = Describe("StatsHandler", func() {
 			["OnData", "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream", "payload", "out", 16],
 			["OnData", "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream", "payload", "in",   8],
 			["OnData", "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream", "payload", "out", 16],
-			["OnCall", "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream", null, "1s"]
+			["OnCall", "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream", null, "1s"],
+
+			["OnConn", -1]
 		]`))
 	})
 })
