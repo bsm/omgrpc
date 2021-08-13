@@ -16,18 +16,24 @@ var _ = Describe("ConnStatsHandler", func() {
 	var (
 		ctx = context.Background()
 
-		subject     ConnStatsHandler
-		connStats   []ConnStats
-		client      testpb.TestClient
-		clientClose func()
-		teardown    func()
+		subject         ConnStatsHandler
+		clientConnStats []ConnStats
+		serverConnStats []ConnStats
+		client          testpb.TestClient
+		clientClose     func()
+		teardown        func()
 	)
 
 	BeforeEach(func() {
-		connStats = connStats[:0]
+		clientConnStats = clientConnStats[:0]
+		serverConnStats = serverConnStats[:0]
 
 		subject = ConnStatsHandler(func(conn *ConnStats) {
-			connStats = append(connStats, *conn)
+			if conn.Client {
+				clientConnStats = append(clientConnStats, *conn)
+			} else {
+				serverConnStats = append(serverConnStats, *conn)
+			}
 		})
 
 		client, clientClose, teardown = initClientServerSystem(
@@ -53,12 +59,13 @@ var _ = Describe("ConnStatsHandler", func() {
 
 		clientClose() // and disconnect right away
 
-		Expect(connStats).To(HaveLen(4))
+		Expect(clientConnStats).To(HaveLen(2))
+		Expect(serverConnStats).To(HaveLen(2))
 
 		var s ConnStats
 
 		// Client connect:
-		s = connStats[0]
+		s = clientConnStats[0]
 		Expect(s.Client).To(BeTrue())
 		Expect(s.Status).To(Equal(Connected))
 		Expect(s.BytesRecv).To(BeZero()) // supported only server-side
@@ -68,25 +75,25 @@ var _ = Describe("ConnStatsHandler", func() {
 		Expect(s.LocalAddr).NotTo(BeNil())
 		Expect(s.RemoteAddr).NotTo(BeNil())
 
+		// Client disconnect:
+		s = clientConnStats[1]
+		Expect(s.Client).To(BeTrue())
+		Expect(s.Status).To(Equal(Disconnected))
+		Expect(s.BytesRecv).To(BeZero()) // supported only server-side
+		Expect(s.BytesSent).To(BeZero()) // supported only server-side
+
 		// Server connect:
-		s = connStats[1]
+		s = serverConnStats[0]
 		Expect(s.Client).To(BeFalse())
 		Expect(s.Status).To(Equal(Connected))
 		Expect(s.BytesRecv).To(BeZero()) // obviously, basically just checking that it's cleaned on pooling
 		Expect(s.BytesSent).To(BeZero()) // obviously, basically just checking that it's cleaned on pooling
 
 		// Server disconnect:
-		s = connStats[2]
+		s = serverConnStats[1]
 		Expect(s.Client).To(BeFalse())
 		Expect(s.Status).To(Equal(Disconnected))
 		Expect(s.BytesRecv).To(Equal(109))
 		Expect(s.BytesSent).To(Equal(30))
-
-		// Client disconnect:
-		s = connStats[3]
-		Expect(s.Client).To(BeTrue())
-		Expect(s.Status).To(Equal(Disconnected))
-		Expect(s.BytesRecv).To(BeZero()) // supported only server-side
-		Expect(s.BytesSent).To(BeZero()) // supported only server-side
 	})
 })

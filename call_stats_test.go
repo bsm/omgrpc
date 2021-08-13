@@ -17,18 +17,24 @@ var _ = Describe("CallStatsHandler", func() {
 	var (
 		ctx = context.Background()
 
-		subject     CallStatsHandler
-		callStats   []CallStats
-		client      testpb.TestClient
-		clientClose func()
-		teardown    func()
+		subject         CallStatsHandler
+		clientCallStats []CallStats
+		serverCallStats []CallStats
+		client          testpb.TestClient
+		clientClose     func()
+		teardown        func()
 	)
 
 	BeforeEach(func() {
-		callStats = callStats[:0]
+		clientCallStats = clientCallStats[:0]
+		serverCallStats = serverCallStats[:0]
 
 		subject = CallStatsHandler(func(call *CallStats) {
-			callStats = append(callStats, *call)
+			if call.Client {
+				clientCallStats = append(clientCallStats, *call)
+			} else {
+				serverCallStats = append(serverCallStats, *call)
+			}
 		})
 
 		client, clientClose, teardown = initClientServerSystem(
@@ -73,17 +79,31 @@ var _ = Describe("CallStatsHandler", func() {
 
 		clientClose() // initiate Stream call to be closed by closing Client
 
+		Expect(clientCallStats).To(HaveLen(2))
+		Expect(serverCallStats).To(HaveLen(2))
+
 		var s CallStats
 
-		// server Unary:
-		s = callStats[0]
-		Expect(s.Client).To(BeFalse())
+		// client Unary:
+		s = clientCallStats[0]
+		Expect(s.Client).To(BeTrue())
 		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Unary"))
 		Expect(s.IsClientStream).To(BeFalse())
 		Expect(s.IsServerStream).To(BeFalse())
-		Expect(s.BytesRecv).To(Equal(94))
-		Expect(s.BytesSent).To(Equal(15))
+		Expect(s.BytesRecv).To(Equal(53))
+		Expect(s.BytesSent).To(Equal(8))
 		Expect(s.Error).To(BeNil())
+
+		// client Stream:
+		s = clientCallStats[1]
+		Expect(s.Client).To(BeTrue())
+		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream"))
+		Expect(s.IsClientStream).To(BeTrue())
+		Expect(s.IsServerStream).To(BeTrue())
+		Expect(s.BytesRecv).To(Equal(36))
+		Expect(s.BytesSent).To(Equal(16))
+		// basically, clientClose affects Client first, and only then Server, so we get this:
+		Expect(s.Error).To(MatchError(ContainSubstring("grpc: the client connection is closing")))
 
 		// assert once that these fields are populated:
 		Expect(s.BeginTime).To(BeTemporally("~", time.Now(), time.Second))
@@ -94,18 +114,18 @@ var _ = Describe("CallStatsHandler", func() {
 		Expect(s.LocalAddr).NotTo(BeNil())  // just check that this is set
 		Expect(s.RemoteAddr).NotTo(BeNil()) // just check that this is set
 
-		// client Unary:
-		s = callStats[1]
-		Expect(s.Client).To(BeTrue())
+		// server Unary:
+		s = serverCallStats[0]
+		Expect(s.Client).To(BeFalse())
 		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Unary"))
 		Expect(s.IsClientStream).To(BeFalse())
 		Expect(s.IsServerStream).To(BeFalse())
-		Expect(s.BytesRecv).To(Equal(53))
-		Expect(s.BytesSent).To(Equal(8))
+		Expect(s.BytesRecv).To(Equal(94))
+		Expect(s.BytesSent).To(Equal(15))
 		Expect(s.Error).To(BeNil())
 
 		// server Stream:
-		s = callStats[2]
+		s = serverCallStats[1]
 		Expect(s.Client).To(BeFalse())
 		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream"))
 		Expect(s.IsClientStream).To(BeTrue())
@@ -113,16 +133,5 @@ var _ = Describe("CallStatsHandler", func() {
 		Expect(s.BytesRecv).To(Equal(64))
 		Expect(s.BytesSent).To(Equal(32))
 		Expect(s.Error).To(BeNil())
-
-		// client Stream:
-		s = callStats[3]
-		Expect(s.Client).To(BeTrue())
-		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream"))
-		Expect(s.IsClientStream).To(BeTrue())
-		Expect(s.IsServerStream).To(BeTrue())
-		Expect(s.BytesRecv).To(Equal(36))
-		Expect(s.BytesSent).To(Equal(16))
-		// basically, clientClose affects Client first, and only then Server, so we get this:
-		Expect(s.Error).To(MatchError(ContainSubstring("grpc: the client connection is closing")))
 	})
 })
