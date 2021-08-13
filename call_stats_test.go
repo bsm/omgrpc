@@ -17,18 +17,19 @@ var _ = Describe("CallStatsHandler", func() {
 	var (
 		ctx = context.Background()
 
+		subject     CallStatsHandler
 		callStats   []CallStats
 		client      testpb.TestClient
 		clientClose func()
 		teardown    func()
 	)
 
-	subject := CallStatsHandler(func(call *CallStats) {
-		callStats = append(callStats, *call)
-	})
-
 	BeforeEach(func() {
 		callStats = callStats[:0]
+
+		subject = CallStatsHandler(func(call *CallStats) {
+			callStats = append(callStats, *call)
+		})
 
 		client, clientClose, teardown = initClientServerSystem(
 			[]grpc.DialOption{
