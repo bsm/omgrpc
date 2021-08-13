@@ -57,7 +57,7 @@ var _ = Describe("CallStatsHandler", func() {
 
 		stream, err := client.Stream(ctx)
 		Expect(err).NotTo(HaveOccurred())
-		defer stream.CloseSend()
+		defer func() { _ = stream.CloseSend() }()
 
 		Expect(stream.SendMsg(&testpb.Message{Payload: "2"})).To(Succeed())
 		Expect(stream.SendMsg(&testpb.Message{Payload: "3"})).To(Succeed())
