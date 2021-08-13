@@ -94,7 +94,6 @@ func (h CallStatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
 		// no WireLength here (at least as of grpc@1.40.0)
 
 	case *stats.OutPayload:
-		call.BytesRecv += s.WireLength
 		call.BytesSent += s.WireLength
 
 	case *stats.OutTrailer:

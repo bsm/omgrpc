@@ -1,10 +1,7 @@
 package omgrpc_test
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/bsm/omgrpc/internal/testpb"
@@ -17,30 +14,21 @@ import (
 )
 
 var _ = Describe("CallStatsHandler", func() {
-	ctx := context.Background()
-	out := bytes.NewBuffer(nil)
-	outJSON := json.NewEncoder(out)
-	subject := CallStatsHandler(func(call *CallStats) {
-		// simplify assertions:
-		call.BeginTime = time.Date(2021, time.August, 12, 19, 8, 52, 0, time.UTC)
-		call.EndTime = time.Date(2021, time.August, 12, 19, 8, 53, 0, time.UTC)
-		if _, ok := call.InHeader["user-agent"]; ok {
-			call.InHeader["user-agent"] = []string{"IS_SET"} // usually contains grpc version
-		}
-		if _, ok := call.OutHeader["user-agent"]; ok {
-			call.OutHeader["user-agent"] = []string{"IS_SET"} // usually contains grpc version
-		}
-		Expect(outJSON.Encode(call)).To(Succeed())
-	})
-
 	var (
+		ctx = context.Background()
+
+		callStats   []*CallStats
 		client      testpb.TestClient
 		clientClose func()
 		teardown    func()
 	)
 
+	subject := CallStatsHandler(func(call *CallStats) {
+		callStats = append(callStats, call)
+	})
+
 	BeforeEach(func() {
-		out.Reset()
+		callStats = callStats[:0]
 
 		client, clientClose, teardown = initClientServerSystem(
 			[]grpc.DialOption{
@@ -64,7 +52,7 @@ var _ = Describe("CallStatsHandler", func() {
 
 		msg, err = client.Unary(ctx, &testpb.Message{Payload: "1"})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(msg.Payload).To(Equal("Unary: 1"))
+		Expect(msg.Payload).To(Equal("Unary: 1")) // payload assertions are to illustrate/justify transfer size checks
 
 		stream, err := client.Stream(ctx)
 		Expect(err).NotTo(HaveOccurred())
@@ -82,123 +70,58 @@ var _ = Describe("CallStatsHandler", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(msg.Payload).To(Equal("Stream: 3"))
 
-		clientClose()
+		clientClose() // initiate Stream call to be closed by closing Client
 
-		jsonLines := strings.Split(strings.TrimSpace(out.String()), "\n")
-		Expect(jsonLines).To(ConsistOf(
-			MatchJSON(`{
-				"FullMethodName": "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Unary",
-				"FailFast": false,
-				"Client": false,
-				"BeginTime": "2021-08-12T19:08:52Z",
-				"IsClientStream": false,
-				"IsServerStream": false,
-				"InHeader": {
-					":authority": [
-						"bufconn"
-					],
-					"content-type": [
-						"application/grpc"
-					],
-					"user-agent": [
-						"IS_SET"
-					]
-				},
-				"InTrailer": null,
-				"OutHeader": {},
-				"OutTrailer": {},
-				"EndTime": "2021-08-12T19:08:53Z",
-				"Error": null,
-				"RemoteAddr": {},
-				"LocalAddr": {},
-				"BytesRecv": 109,
-				"BytesSent": 15
-			}`),
-			MatchJSON(`{
-				"FullMethodName": "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Unary",
-				"FailFast": true,
-				"Client": true,
-				"BeginTime": "2021-08-12T19:08:52Z",
-				"IsClientStream": false,
-				"IsServerStream": false,
-				"InHeader": {
-					"content-type": [
-						"application/grpc"
-					]
-				},
-				"InTrailer": {},
-				"OutHeader": {
-					"user-agent": [
-						"IS_SET"
-					]
-				},
-				"OutTrailer": null,
-				"EndTime": "2021-08-12T19:08:53Z",
-				"Error": null,
-				"RemoteAddr": {},
-				"LocalAddr": {},
-				"BytesRecv": 61,
-				"BytesSent": 8
-			}`),
-			MatchJSON(`{
-				"FullMethodName": "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream",
-				"FailFast": false,
-				"Client": false,
-				"BeginTime": "2021-08-12T19:08:52Z",
-				"IsClientStream": true,
-				"IsServerStream": true,
-				"InHeader": {
-					":authority": [
-						"bufconn"
-					],
-					"content-type": [
-						"application/grpc"
-					],
-					"user-agent": [
-						"IS_SET"
-					]
-				},
-				"InTrailer": null,
-				"OutHeader": {},
-				"OutTrailer": {},
-				"EndTime": "2021-08-12T19:08:53Z",
-				"Error": null,
-				"RemoteAddr": {},
-				"LocalAddr": {},
-				"BytesRecv": 96,
-				"BytesSent": 32
-			}`),
+		var s *CallStats
 
-			// Note "Error" here - it's context.Cancelled (because of server closed conn)
-			MatchJSON(`{
-				"FullMethodName": "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream",
-				"FailFast": true,
-				"Client": true,
-				"BeginTime": "2021-08-12T19:08:52Z",
-				"IsClientStream": true,
-				"IsServerStream": true,
-				"InHeader": {
-					"content-type": [
-						"application/grpc"
-					]
-				},
-				"InTrailer": {},
-				"OutHeader": {
-					"user-agent": [
-						"IS_SET"
-					]
-				},
-				"OutTrailer": null,
-				"EndTime": "2021-08-12T19:08:53Z",
-				"Error": {},
-				"RemoteAddr": {},
-				"LocalAddr": {},
-				"BytesRecv": 52,
-				"BytesSent": 16
-			}`),
-		))
+		// server Unary:
+		s = callStats[0]
+		Expect(s.Client).To(BeFalse())
+		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Unary"))
+		Expect(s.IsClientStream).To(BeFalse())
+		Expect(s.IsServerStream).To(BeFalse())
+		Expect(s.BytesRecv).To(Equal(94))
+		Expect(s.BytesSent).To(Equal(15))
+		Expect(s.Error).To(BeNil())
+
+		// assert once that these fields are populated:
+		Expect(s.BeginTime).To(BeTemporally("~", time.Now(), time.Second))
+		Expect(s.EndTime).To(BeTemporally("~", time.Now(), time.Second))
+		Expect(s.EndTime).To(BeTemporally(">", s.BeginTime))
+		Expect(s.InHeader).NotTo(BeNil())   // just check that this is set; no assertions for InTrailer as they're rare and not used in this test
+		Expect(s.OutHeader).NotTo(BeNil())  // just check that this is set; no assertions for InTrailer as they're rare and not used in this test
+		Expect(s.LocalAddr).NotTo(BeNil())  // just check that this is set
+		Expect(s.RemoteAddr).NotTo(BeNil()) // just check that this is set
+
+		// client Unary:
+		s = callStats[1]
+		Expect(s.Client).To(BeTrue())
+		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Unary"))
+		Expect(s.IsClientStream).To(BeFalse())
+		Expect(s.IsServerStream).To(BeFalse())
+		Expect(s.BytesRecv).To(Equal(53))
+		Expect(s.BytesSent).To(Equal(8))
+		Expect(s.Error).To(BeNil())
+
+		// server Stream:
+		s = callStats[2]
+		Expect(s.Client).To(BeFalse())
+		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream"))
+		Expect(s.IsClientStream).To(BeTrue())
+		Expect(s.IsServerStream).To(BeTrue())
+		Expect(s.BytesRecv).To(Equal(64))
+		Expect(s.BytesSent).To(Equal(32))
+		Expect(s.Error).To(BeNil())
+
+		// client Stream:
+		s = callStats[3]
+		Expect(s.Client).To(BeTrue())
+		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream"))
+		Expect(s.IsClientStream).To(BeTrue())
+		Expect(s.IsServerStream).To(BeTrue())
+		Expect(s.BytesRecv).To(Equal(36))
+		Expect(s.BytesSent).To(Equal(16))
+		// basically, clientClose affects Client first, and only then Server, so we get this:
+		Expect(s.Error).To(MatchError(ContainSubstring("grpc: the client connection is closing")))
 	})
-
-	PIt("registers errors")
-
 })
