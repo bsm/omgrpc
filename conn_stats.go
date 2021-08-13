@@ -12,6 +12,7 @@ import (
 type ConnStats struct {
 	Client                bool // indicates client-side stats
 	LocalAddr, RemoteAddr net.Addr
+	BytesRecv, BytesSent  int  // supported only for server side
 	Connected             bool // indicates if emitted stats is "client connected" or "client disconnected" event
 }
 
@@ -32,6 +33,11 @@ func getConnStats(ctx context.Context) *ConnStats {
 	return ctx.Value(contextKeyConnStats).(*ConnStats)
 }
 
+func maybeGetConnStats(ctx context.Context) *ConnStats {
+	conn, _ := ctx.Value(contextKeyConnStats).(*ConnStats)
+	return conn
+}
+
 // ----------------------------------------------------------------------------
 
 // ConnStatsHandler implements https://pkg.go.dev/google.golang.org/grpc/stats#Handler for RPC connections.
@@ -49,7 +55,34 @@ func (h ConnStatsHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) co
 }
 
 // TagConn implements grpc/stats.Handler interface and does nothing.
-func (h ConnStatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {}
+func (h ConnStatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
+	switch s := stat.(type) {
+
+	case *stats.InHeader:
+		if conn := maybeGetConnStats(ctx); conn != nil {
+			conn.BytesRecv += s.WireLength
+		}
+
+	case *stats.InPayload:
+		if conn := maybeGetConnStats(ctx); conn != nil {
+			conn.BytesRecv += s.WireLength
+		}
+
+	case *stats.InTrailer:
+		if conn := maybeGetConnStats(ctx); conn != nil {
+			conn.BytesRecv += s.WireLength
+		}
+
+	// case *stats.OutHeader: // no WireLength in OutHeader and OutTrailer (at least as of grpc@1.40.0)
+	// case *stats.OutTrailer: // WireLength is deprecated here
+
+	case *stats.OutPayload:
+		if conn := maybeGetConnStats(ctx); conn != nil {
+			conn.BytesSent += s.WireLength
+		}
+
+	}
+}
 
 // TagRPC attaches omgrpc-internal data to connection context.
 func (h ConnStatsHandler) TagConn(ctx context.Context, info *stats.ConnTagInfo) context.Context {

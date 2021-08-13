@@ -44,8 +44,13 @@ var _ = Describe("ConnStatsHandler", func() {
 	})
 
 	It("tracks call stats", func() {
-		_, _ = client.Unary(ctx, &testpb.Message{Payload: "trigger connection"}) // grpc.Dial can be lazy and can connect on first gRPC call
-		clientClose()                                                            // and disconnect right away
+		var err error
+		_, err = client.Unary(ctx, &testpb.Message{Payload: "1"})
+		Expect(err).NotTo(HaveOccurred())
+		_, err = client.Unary(ctx, &testpb.Message{Payload: "2"})
+		Expect(err).NotTo(HaveOccurred())
+
+		clientClose() // and disconnect right away
 
 		Expect(connStats).To(HaveLen(4))
 
@@ -55,6 +60,8 @@ var _ = Describe("ConnStatsHandler", func() {
 		s = connStats[0]
 		Expect(s.Client).To(BeTrue())
 		Expect(s.Connected).To(BeTrue())
+		Expect(s.BytesRecv).To(BeZero()) // supported only server-side
+		Expect(s.BytesSent).To(BeZero()) // supported only server-side
 
 		// assert once that these fields are populated:
 		Expect(s.LocalAddr).NotTo(BeNil())
@@ -64,15 +71,22 @@ var _ = Describe("ConnStatsHandler", func() {
 		s = connStats[1]
 		Expect(s.Client).To(BeFalse())
 		Expect(s.Connected).To(BeTrue())
+		Expect(s.BytesRecv).To(BeZero()) // obviously, basically just checking that it's cleaned on pooling
+		Expect(s.BytesSent).To(BeZero()) // obviously, basically just checking that it's cleaned on pooling
 
 		// Server disconnect:
 		s = connStats[2]
 		Expect(s.Client).To(BeFalse())
 		Expect(s.Connected).To(BeFalse())
+		Expect(s.BytesRecv).To(Equal(109))
+		Expect(s.BytesSent).To(Equal(30))
 
 		// Client disconnect:
 		s = connStats[3]
 		Expect(s.Client).To(BeTrue())
 		Expect(s.Connected).To(BeFalse())
+		Expect(s.BytesRecv).To(BeZero()) // supported only server-side
+		Expect(s.BytesSent).To(BeZero()) // supported only server-side
+
 	})
 })
