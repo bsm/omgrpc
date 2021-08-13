@@ -111,8 +111,8 @@ var _ = Describe("CallStatsHandler", func() {
 				"Error": null,
 				"RemoteAddr": {},
 				"LocalAddr": {},
-				"InWireLength": 109,
-				"OutWireLength": 15
+				"BytesRecv": 109,
+				"BytesSent": 15
 			}`),
 			MatchJSON(`{
 				"FullMethodName": "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Unary",
@@ -137,8 +137,8 @@ var _ = Describe("CallStatsHandler", func() {
 				"Error": null,
 				"RemoteAddr": {},
 				"LocalAddr": {},
-				"InWireLength": 61,
-				"OutWireLength": 8
+				"BytesRecv": 61,
+				"BytesSent": 8
 			}`),
 			MatchJSON(`{
 				"FullMethodName": "/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream",
@@ -165,8 +165,8 @@ var _ = Describe("CallStatsHandler", func() {
 				"Error": null,
 				"RemoteAddr": {},
 				"LocalAddr": {},
-				"InWireLength": 96,
-				"OutWireLength": 32
+				"BytesRecv": 96,
+				"BytesSent": 32
 			}`),
 
 			// Note "Error" here - it's context.Cancelled (because of server closed conn)
@@ -193,8 +193,8 @@ var _ = Describe("CallStatsHandler", func() {
 				"Error": {},
 				"RemoteAddr": {},
 				"LocalAddr": {},
-				"InWireLength": 52,
-				"OutWireLength": 16
+				"BytesRecv": 52,
+				"BytesSent": 16
 			}`),
 		))
 	})

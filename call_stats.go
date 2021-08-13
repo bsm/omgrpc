@@ -12,86 +12,18 @@ import (
 // CallStats holds all the RPC call-related data
 // that can be collected by stats handler.
 type CallStats struct {
+	Client   bool // indicates client-side stats
+	FailFast bool // only valid for client
 
-	// Fields can be aggregated when it makes sense, e.g.:
-	// grpc/stats.*.WireLength
-	//
-	// Duplicated fields are set on first occurrence, e.g.:
-	// grpc/stats.RPCTagInfo.FailFast
-	//
-	// Ambiguous fields are not collected at all, e.g.:
-	// grpc/stats.*.Compression
+	FullMethodName                 string
+	IsClientStream, IsServerStream bool
+	BeginTime, EndTime             time.Time
+	InHeader, InTrailer            metadata.MD
+	OutHeader, OutTrailer          metadata.MD
+	LocalAddr, RemoteAddr          net.Addr
+	BytesRecv, BytesSent           int
 
-	// https://pkg.go.dev/google.golang.org/grpc/stats#RPCTagInfo
-
-	// FullMethodName is the RPC method in the format of /package.service/method.
-	FullMethodName string
-	// FailFast indicates if this RPC is failfast.
-	// This field is only valid on client side, it's always false on server side.
-	FailFast bool
-
-	// https://pkg.go.dev/google.golang.org/grpc/stats#Begin
-
-	// Client is true if this Begin is from client side.
-	Client bool
-	// BeginTime is the time when the RPC begins.
-	BeginTime time.Time
-	// IsClientStream indicates whether the RPC is a client streaming RPC.
-	IsClientStream bool
-	// IsServerStream indicates whether the RPC is a server streaming RPC.
-	IsServerStream bool
-
-	// https://pkg.go.dev/google.golang.org/grpc/stats#InHeader
-
-	// InHeader contains the header metadata received.
-	InHeader metadata.MD
-
-	// Assumed to happen once:
-	// https://pkg.go.dev/google.golang.org/grpc/stats#InTrailer
-
-	// InTrailer contains the trailer metadata received from the server. This
-	// field is only valid if for client stats.
-	InTrailer metadata.MD
-
-	// https://pkg.go.dev/google.golang.org/grpc/stats#OutHeader
-
-	// OutHeader contains the header metadata sent.
-	OutHeader metadata.MD
-
-	// https://pkg.go.dev/google.golang.org/grpc/stats#OutTrailer
-
-	// OutTrailer contains the trailer metadata sent to the client. This
-	// field is only valid if this OutTrailer is from the server side.
-	OutTrailer metadata.MD
-
-	// https://pkg.go.dev/google.golang.org/grpc/stats#End
-
-	// EndTime is the time when the RPC ends.
-	EndTime time.Time
-	// Error is the error the RPC ended with. It is an error generated from
-	// status.Status and can be converted back to status.Status using
-	// status.FromError if non-nil.
-	Error error
-
-	// Client/Server exclusive fields:
-
-	// The following fields are set from:
-	// for server stats:
-	// https://pkg.go.dev/google.golang.org/grpc/stats#InHeader
-	// for client stats:
-	// https://pkg.go.dev/google.golang.org/grpc/stats#OutHeader
-
-	// RemoteAddr is the remote address of the corresponding connection.
-	RemoteAddr net.Addr
-	// LocalAddr is the local address of the corresponding connection.
-	LocalAddr net.Addr
-
-	// Agregated (multi-event) fields:
-
-	// InWireLength is all compressed, signed, encrypted INPUT data size.
-	InWireLength int
-	// OutWireLength is all compressed, signed, encrypted OUTPUT data size.
-	OutWireLength int
+	Error error // RPC call error, can be examined with s, _ := grpc/status.FromError(err); s.Code()
 }
 
 var contextKeyCallStats struct{}
@@ -144,14 +76,14 @@ func (h CallStatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
 			call.RemoteAddr = s.RemoteAddr
 			call.LocalAddr = s.LocalAddr
 		}
-		call.InWireLength += s.WireLength
+		call.BytesRecv += s.WireLength
 
 	case *stats.InPayload:
-		call.InWireLength += s.WireLength
+		call.BytesRecv += s.WireLength
 
 	case *stats.InTrailer:
 		call.InTrailer = s.Trailer
-		call.InWireLength += s.WireLength
+		call.BytesRecv += s.WireLength
 
 	case *stats.OutHeader:
 		call.OutHeader = s.Header
@@ -162,8 +94,8 @@ func (h CallStatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
 		// no WireLength here (at least as of grpc@1.40.0)
 
 	case *stats.OutPayload:
-		call.InWireLength += s.WireLength
-		call.OutWireLength += s.WireLength
+		call.BytesRecv += s.WireLength
+		call.BytesSent += s.WireLength
 
 	case *stats.OutTrailer:
 		call.OutTrailer = s.Trailer
