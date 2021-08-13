@@ -12,7 +12,7 @@ import (
 type ConnStats struct {
 	Client                bool // indicates client-side stats
 	LocalAddr, RemoteAddr net.Addr
-	BytesRecv, BytesSent  int  // supported only for server side
+	BytesRecv, BytesSent  int  // supported only for server side, only when Connected=false
 	Connected             bool // indicates if emitted stats is "client connected" or "client disconnected" event
 }
 
