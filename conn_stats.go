@@ -33,11 +33,6 @@ func getConnStats(ctx context.Context) *ConnStats {
 	return ctx.Value(contextKeyConnStats).(*ConnStats)
 }
 
-func maybeGetConnStats(ctx context.Context) *ConnStats {
-	conn, _ := ctx.Value(contextKeyConnStats).(*ConnStats)
-	return conn
-}
-
 // ----------------------------------------------------------------------------
 
 // ConnStatsHandler implements https://pkg.go.dev/google.golang.org/grpc/stats#Handler for RPC connections.
