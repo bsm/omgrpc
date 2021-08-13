@@ -13,8 +13,8 @@ import (
 
 func initGRPCServer(fooServer yourproto.FooServer) *grpc.Server {
   server := grpc.NewServer(
-    grpc.StatsHandler(omgrpc.DefaultCallStatsHandler(openmetrics.DefaultRegistry())), // to track grpc_call count + timings
-    grpc.StatsHandler(omgrpc.DefaultConnStatsHandler(openmetrics.DefaultRegistry())), // to track grpc_active_conns
+    grpc.StatsHandler(omgrpc.DefaultCallStatsHandler(nil /* defaults to openmetrics.DefaultRegistry() */ )), // track grpc_call count + timings
+    grpc.StatsHandler(omgrpc.DefaultConnStatsHandler(nil)), // track grpc_active_conns
   )
   yourproto.RegisterFooServer(server, fooServer)
   return server
@@ -28,8 +28,8 @@ func initGRPCClient(ctx context.Context, target string) (*grpc.Conn, error) {
     // same registry/same handler can be used for client connection
     // as long as you run them in different processes
     // so metrics do not overlap:
-    grpc.StatsHandler(omgrpc.DefaultCallStatsHandler(openmetrics.DefaultRegistry())), // to track grpc_call count + timings
-    grpc.StatsHandler(omgrpc.DefaultConnStatsHandler(openmetrics.DefaultRegistry())), // to track grpc_active_conns
+    grpc.StatsHandler(omgrpc.DefaultCallStatsHandler(nil)), // track grpc_call count + timings
+    grpc.StatsHandler(omgrpc.DefaultConnStatsHandler(nil)), // track grpc_active_conns
   )
   return conn
 }
