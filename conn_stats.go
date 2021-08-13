@@ -8,12 +8,21 @@ import (
 	"google.golang.org/grpc/stats"
 )
 
+// ConnStatus holds connection status.
+type ConnStatus int8
+
+const (
+	Connected ConnStatus = iota
+	Disconnected
+)
+
 // ConnStats holds connection stats.
 type ConnStats struct {
-	Client                bool // indicates client-side stats
+	Client bool // indicates client-side stats
+	Status ConnStatus
+
 	LocalAddr, RemoteAddr net.Addr
-	BytesRecv, BytesSent  int  // supported only for server side, only when Connected=false
-	Connected             bool // indicates if emitted stats is "client connected" or "client disconnected" event
+	BytesRecv, BytesSent  int // supported only for server side, only when Connected=false
 }
 
 var connStatsPool = sync.Pool{
@@ -91,12 +100,12 @@ func (h ConnStatsHandler) HandleConn(ctx context.Context, stat stats.ConnStats) 
 
 	switch s := stat.(type) {
 	case *stats.ConnBegin:
-		conn.Connected = true
+		conn.Status = Connected
 		conn.Client = s.Client
 		h(conn)
 
 	case *stats.ConnEnd:
-		conn.Connected = false
+		conn.Status = Disconnected
 		h(conn)
 		*conn = ConnStats{}
 		connStatsPool.Put(conn)
