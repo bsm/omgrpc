@@ -88,6 +88,5 @@ var _ = Describe("ConnStatsHandler", func() {
 		Expect(s.Status).To(Equal(Disconnected))
 		Expect(s.BytesRecv).To(BeZero()) // supported only server-side
 		Expect(s.BytesSent).To(BeZero()) // supported only server-side
-
 	})
 })
