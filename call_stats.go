@@ -6,8 +6,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bsm/openmetrics"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
+	"google.golang.org/grpc/status"
 )
 
 // CallStats holds all the RPC call-related data
@@ -52,8 +54,32 @@ func getCallStats(ctx context.Context) *CallStats {
 // It assumes that stats.Handler methods are never called concurrently.
 type CallStatsHandler func(*CallStats)
 
-// TODO: make default call stats handler.
-// func NewDefaultCallStatsHandler(reg openmetrics.Registry) CallStatsHandler
+// NewDefaultCallStatsHandler builds a CallStatsHandler that tracks default metrics.
+//
+//   - "grpc_call" counter with "method", "status" labels
+//   - "grpc_call" histogram with "method", "status" labels; seconds unit; .1, .2, 0.5, 1 buckets
+//
+func NewDefaultCallStatsHandler(reg openmetrics.Registry) CallStatsHandler {
+	callCount := reg.Counter(openmetrics.Desc{
+		Name:   "grpc_call",
+		Help:   "gRPC call counter",
+		Labels: []string{"method", "status"},
+	})
+	callDuration := reg.Histogram(openmetrics.Desc{
+		Name:   "grpc_call",
+		Unit:   "seconds",
+		Help:   "gRPC call timing",
+		Labels: []string{"method", "status"},
+	}, []float64{.1, .2, 0.5, 1})
+
+	return func(call *CallStats) {
+		s, _ := status.FromError(call.Error) // returns Unknown status instead of nil
+		status := s.Code().String()
+
+		callCount.With(call.FullMethodName, status).Add(1)
+		callDuration.With(call.FullMethodName, status).Observe(call.EndTime.Sub(call.BeginTime).Seconds())
+	}
+}
 
 // TagRPC attaches omgrpc-internal data to RPC context.
 func (h CallStatsHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context {
