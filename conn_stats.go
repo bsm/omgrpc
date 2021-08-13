@@ -52,10 +52,15 @@ func getConnStats(ctx context.Context) *ConnStats {
 type ConnStatsHandler func(*ConnStats)
 
 // NewDefaultConnStatsHandler builds a ConnStatsHandler that tracks default metrics.
+// It will default to openmetrics.DefaultRegistry() on nil.
 //
 //   - "grpc_active_conns" gauge with no labels
 //
-func NewDefaultConnStatsHandler(reg openmetrics.Registry) ConnStatsHandler {
+func NewDefaultConnStatsHandler(reg *openmetrics.Registry) ConnStatsHandler {
+	if reg == nil {
+		reg = openmetrics.DefaultRegistry()
+	}
+
 	activeConnGauge := reg.Gauge(openmetrics.Desc{
 		Name:   "grpc_active_conns",
 		Help:   "gRPC active connections gauge",

@@ -55,11 +55,16 @@ func getCallStats(ctx context.Context) *CallStats {
 type CallStatsHandler func(*CallStats)
 
 // NewDefaultCallStatsHandler builds a CallStatsHandler that tracks default metrics.
+// It will default to openmetrics.DefaultRegistry() on nil.
 //
 //   - "grpc_call" counter with "method", "status" labels
 //   - "grpc_call" histogram with "method", "status" labels; seconds unit; .1, .2, 0.5, 1 buckets
 //
-func NewDefaultCallStatsHandler(reg openmetrics.Registry) CallStatsHandler {
+func NewDefaultCallStatsHandler(reg *openmetrics.Registry) CallStatsHandler {
+	if reg == nil {
+		reg = openmetrics.DefaultRegistry()
+	}
+
 	callCount := reg.Counter(openmetrics.Desc{
 		Name:   "grpc_call",
 		Help:   "gRPC call counter",
