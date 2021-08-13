@@ -3,6 +3,7 @@ package omgrpc
 import (
 	"context"
 	"net"
+	"sync"
 	"time"
 
 	"google.golang.org/grpc/metadata"
@@ -26,6 +27,12 @@ type CallStats struct {
 	Error error // RPC call error, can be examined with s, _ := grpc/status.FromError(err); s.Code()
 }
 
+var callStatsPool = sync.Pool{
+	New: func() interface{} {
+		return new(CallStats)
+	},
+}
+
 var contextKeyCallStats struct{}
 
 func setCallStats(ctx context.Context, call *CallStats) context.Context {
@@ -40,6 +47,7 @@ func getCallStats(ctx context.Context) *CallStats {
 // --------------------------------------------------------------------------------------
 
 // CallStatsHandler implements https://pkg.go.dev/google.golang.org/grpc/stats#Handler for RPC calls.
+// CallStats argument is reused (pooled), so pointer cannot be stored - copy instead.
 //
 // It assumes that stats.Handler methods are never called concurrently.
 type CallStatsHandler func(*CallStats)
@@ -50,10 +58,10 @@ type CallStatsHandler func(*CallStats)
 // TagRPC attaches omgrpc-internal data to RPC context.
 func (h CallStatsHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context {
 	// this method is called before HandleRPC, init CallStats at this point:
-	return setCallStats(ctx, &CallStats{
-		FullMethodName: info.FullMethodName,
-		FailFast:       info.FailFast,
-	})
+	call := callStatsPool.Get().(*CallStats)
+	call.FullMethodName = info.FullMethodName
+	call.FailFast = info.FailFast
+	return setCallStats(ctx, call)
 }
 
 // HandleRPC processes the RPC stats.
@@ -104,6 +112,8 @@ func (h CallStatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
 		call.EndTime = s.EndTime
 		call.Error = s.Error
 		h(call) // "submit" collected stats
+		*call = CallStats{}
+		callStatsPool.Put(call)
 
 	}
 }

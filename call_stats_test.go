@@ -17,14 +17,14 @@ var _ = Describe("CallStatsHandler", func() {
 	var (
 		ctx = context.Background()
 
-		callStats   []*CallStats
+		callStats   []CallStats
 		client      testpb.TestClient
 		clientClose func()
 		teardown    func()
 	)
 
 	subject := CallStatsHandler(func(call *CallStats) {
-		callStats = append(callStats, call)
+		callStats = append(callStats, *call)
 	})
 
 	BeforeEach(func() {
@@ -72,7 +72,7 @@ var _ = Describe("CallStatsHandler", func() {
 
 		clientClose() // initiate Stream call to be closed by closing Client
 
-		var s *CallStats
+		var s CallStats
 
 		// server Unary:
 		s = callStats[0]
