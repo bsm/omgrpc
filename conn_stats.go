@@ -54,32 +54,30 @@ func (h ConnStatsHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) co
 	return ctx
 }
 
-// TagConn implements grpc/stats.Handler interface and does nothing.
+// TagConn tracks server-side
 func (h ConnStatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
+	if stat.IsClient() {
+		return // ctx has tagged conn only server-side
+	}
+
+	conn := getConnStats(ctx)
+
 	switch s := stat.(type) {
 
 	case *stats.InHeader:
-		if conn := maybeGetConnStats(ctx); conn != nil {
-			conn.BytesRecv += s.WireLength
-		}
+		conn.BytesRecv += s.WireLength
 
 	case *stats.InPayload:
-		if conn := maybeGetConnStats(ctx); conn != nil {
-			conn.BytesRecv += s.WireLength
-		}
+		conn.BytesRecv += s.WireLength
 
 	case *stats.InTrailer:
-		if conn := maybeGetConnStats(ctx); conn != nil {
-			conn.BytesRecv += s.WireLength
-		}
+		conn.BytesRecv += s.WireLength
 
 	// case *stats.OutHeader: // no WireLength in OutHeader and OutTrailer (at least as of grpc@1.40.0)
 	// case *stats.OutTrailer: // WireLength is deprecated here
 
 	case *stats.OutPayload:
-		if conn := maybeGetConnStats(ctx); conn != nil {
-			conn.BytesSent += s.WireLength
-		}
+		conn.BytesSent += s.WireLength
 
 	}
 }
@@ -92,7 +90,7 @@ func (h ConnStatsHandler) TagConn(ctx context.Context, info *stats.ConnTagInfo) 
 	return setConnStats(ctx, conn)
 }
 
-// HandleConn implements grpc/stats.Handler interface and does nothing.
+// TagRPC attaches omgrpc-internal data to connection context.
 func (h ConnStatsHandler) HandleConn(ctx context.Context, stat stats.ConnStats) {
 	conn := getConnStats(ctx)
 
