@@ -2,6 +2,7 @@ package omgrpc
 
 import (
 	"strings"
+	"time"
 
 	"github.com/bsm/openmetrics"
 	"google.golang.org/grpc/stats"
@@ -23,18 +24,20 @@ func InstrumentCallCount(m openmetrics.CounterFamily) stats.Handler {
 	})
 }
 
-// InstrumentCallDuration returns default stats.Handler to instrument RPC call duration.
+// InstrumentCallDuration returns default stats.Handler to instrument RPC call duration in units configured for metric.
 // It populates labels it can recognize and leaves others empty:
 //
 //   - "method" - full method name like "/com.package/MethodName"
 //   - "status" or "code" - populated with gRPC code string: https://pkg.go.dev/google.golang.org/grpc/codes#Code
 //
 func InstrumentCallDuration(m openmetrics.HistogramFamily) stats.Handler {
-	extractors := buildCallExtractors(m.Desc().Labels)
+	desc := m.Desc()
+	extractors := buildCallExtractors(desc.Labels)
+	convertDuration := makeDurationConverter(desc.Unit)
 
 	return CallStatsHandler(func(call *CallStats) {
 		labels := extractCallLabels(extractors, call)
-		m.With(labels...).Observe(float64(call.Duration()))
+		m.With(labels...).Observe(float64(convertDuration(call.Duration())))
 	})
 }
 
@@ -94,4 +97,17 @@ func extractCallStatus(call *CallStats) string {
 
 func returnEmptyString(*CallStats) string {
 	return ""
+}
+
+func makeDurationConverter(unit string) func(time.Duration) float64 {
+	switch unit {
+	case "nanoseconds":
+		return func(d time.Duration) float64 { return float64(d.Nanoseconds()) }
+	case "microseconds":
+		return func(d time.Duration) float64 { return float64(d.Microseconds()) }
+	case "milliseconds":
+		return func(d time.Duration) float64 { return float64(d.Milliseconds()) }
+	default:
+		return func(d time.Duration) float64 { return d.Seconds() }
+	}
 }
