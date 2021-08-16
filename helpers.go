@@ -1,67 +1,94 @@
 package omgrpc
 
 import (
+	"strings"
+
 	"github.com/bsm/openmetrics"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 )
 
-// NewDefaultCallStatsHandler builds a CallStatsHandler that tracks default metrics.
-// It will default to openmetrics.DefaultRegistry() on nil.
+// InstrumentCallCount returns default stats.Handler to instrument RPC call count.
+// It populates labels it can recognize and leaves others empty:
 //
-//   - "grpc_call" counter with "method", "status" labels
-//   - "grpc_call" histogram with "method", "status" labels; seconds unit; .1, .2, 0.5, 1 buckets
+//   - /*method*/ - full method name like "/com.package/MethodName"
+//   - /*(status|code)*/ - populated with gRPC code string: https://pkg.go.dev/google.golang.org/grpc/codes#Code
 //
-func NewDefaultCallStatsHandler(reg *openmetrics.Registry) stats.Handler {
-	if reg == nil {
-		reg = openmetrics.DefaultRegistry()
-	}
-
-	callCount := reg.Counter(openmetrics.Desc{
-		Name:   "grpc_call",
-		Help:   "gRPC call counter",
-		Labels: []string{"method", "status"},
-	})
-	callDuration := reg.Histogram(openmetrics.Desc{
-		Name:   "grpc_call",
-		Unit:   "seconds",
-		Help:   "gRPC call timing",
-		Labels: []string{"method", "status"},
-	}, []float64{.1, .2, 0.5, 1})
+func InstrumentCallCount(m openmetrics.CounterFamily) stats.Handler {
+	extractors := buildCallExtractors(m.Desc().Labels)
 
 	return CallStatsHandler(func(call *CallStats) {
-		s, _ := status.FromError(call.Error) // returns Unknown status instead of nil
-		status := s.Code().String()
+		labels := extractCallLabels(extractors, call)
+		m.With(labels...).Add(1)
+	})
+}
 
-		callCount.With(call.FullMethodName, status).Add(1)
-		callDuration.With(call.FullMethodName, status).Observe(call.EndTime.Sub(call.BeginTime).Seconds())
+// InstrumentCallDuration returns default stats.Handler to instrument RPC call duration.
+// It populates labels it can recognize and leaves others empty:
+//
+//   - /*method*/ - full method name like "/com.package/MethodName"
+//   - /*(status|code)*/ - populated with gRPC code string: https://pkg.go.dev/google.golang.org/grpc/codes#Code
+//
+func InstrumentCallDuration(m openmetrics.HistogramFamily) stats.Handler {
+	extractors := buildCallExtractors(m.Desc().Labels)
+
+	return CallStatsHandler(func(call *CallStats) {
+		labels := extractCallLabels(extractors, call)
+		elapsed := call.EndTime.Sub(call.BeginTime)
+		m.With(labels...).Observe(float64(elapsed))
+	})
+}
+
+// InstrumentActiveConns returns default stats.Handler to instrument number of active gRPC connections.
+// It populates all the labels empty (if any).
+func InstrumentActiveConns(m openmetrics.GaugeFamily) stats.Handler {
+	numLabel := len(m.Desc().Labels)
+
+	return ConnStatsHandler(func(conn *ConnStats) {
+		labels := make([]string, numLabel) // all empty, nothing to populate here
+		switch conn.Status {
+		case Connected:
+			m.With(labels...).Add(1)
+		case Disconnected:
+			m.With(labels...).Add(-1)
+		}
 	})
 }
 
 // ----------------------------------------------------------------------------
 
-// NewDefaultConnStatsHandler builds a ConnStatsHandler that tracks default metrics.
-// It will default to openmetrics.DefaultRegistry() on nil.
-//
-//   - "grpc_active_conns" gauge with no labels
-//
-func NewDefaultConnStatsHandler(reg *openmetrics.Registry) stats.Handler {
-	if reg == nil {
-		reg = openmetrics.DefaultRegistry()
-	}
-
-	activeConnGauge := reg.Gauge(openmetrics.Desc{
-		Name:   "grpc_active_conns",
-		Help:   "gRPC active connections gauge",
-		Labels: []string{},
-	})
-
-	return ConnStatsHandler(func(conn *ConnStats) {
-		switch conn.Status {
-		case Connected:
-			activeConnGauge.With().Add(1)
-		case Disconnected:
-			activeConnGauge.With().Add(-1)
+func buildCallExtractors(labels []string) []func(*CallStats) string {
+	extractors := make([]func(*CallStats) string, 0, len(labels))
+	for _, l := range labels {
+		name := strings.ToLower(l)
+		if strings.Contains(name, "method") {
+			extractors = append(extractors, extractCallMethod)
+		} else if strings.Contains(name, "status") || strings.Contains(name, "code") {
+			extractors = append(extractors, extractCallStatus)
+		} else {
+			extractors = append(extractors, returnEmptyString)
 		}
-	})
+	}
+	return extractors
+}
+
+func extractCallLabels(extractors []func(*CallStats) string, call *CallStats) []string {
+	values := make([]string, 0, len(extractors))
+	for _, extract := range extractors {
+		values = append(values, extract(call))
+	}
+	return values
+}
+
+func extractCallMethod(call *CallStats) string {
+	return call.FullMethodName
+}
+
+func extractCallStatus(call *CallStats) string {
+	s, _ := status.FromError(call.Error) // returns Unknown status instead of nil
+	return s.Code().String()
+}
+
+func returnEmptyString(*CallStats) string {
+	return ""
 }
