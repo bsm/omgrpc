@@ -11,8 +11,8 @@ import (
 // InstrumentCallCount returns default stats.Handler to instrument RPC call count.
 // It populates labels it can recognize and leaves others empty:
 //
-//   - /*method*/ - full method name like "/com.package/MethodName"
-//   - /*(status|code)*/ - populated with gRPC code string: https://pkg.go.dev/google.golang.org/grpc/codes#Code
+//   - "method" - full method name like "/com.package/MethodName"
+//   - "status" or "code" - populated with gRPC code string: https://pkg.go.dev/google.golang.org/grpc/codes#Code
 //
 func InstrumentCallCount(m openmetrics.CounterFamily) stats.Handler {
 	extractors := buildCallExtractors(m.Desc().Labels)
@@ -26,8 +26,8 @@ func InstrumentCallCount(m openmetrics.CounterFamily) stats.Handler {
 // InstrumentCallDuration returns default stats.Handler to instrument RPC call duration.
 // It populates labels it can recognize and leaves others empty:
 //
-//   - /*method*/ - full method name like "/com.package/MethodName"
-//   - /*(status|code)*/ - populated with gRPC code string: https://pkg.go.dev/google.golang.org/grpc/codes#Code
+//   - "method" - full method name like "/com.package/MethodName"
+//   - "status" or "code" - populated with gRPC code string: https://pkg.go.dev/google.golang.org/grpc/codes#Code
 //
 func InstrumentCallDuration(m openmetrics.HistogramFamily) stats.Handler {
 	extractors := buildCallExtractors(m.Desc().Labels)
@@ -60,10 +60,9 @@ func InstrumentActiveConns(m openmetrics.GaugeFamily) stats.Handler {
 func buildCallExtractors(labels []string) []func(*CallStats) string {
 	extractors := make([]func(*CallStats) string, 0, len(labels))
 	for _, l := range labels {
-		name := strings.ToLower(l)
-		if strings.Contains(name, "method") {
+		if strings.EqualFold(l, "method") {
 			extractors = append(extractors, extractCallMethod)
-		} else if strings.Contains(name, "status") || strings.Contains(name, "code") {
+		} else if strings.EqualFold(l, "status") || strings.EqualFold(l, "code") {
 			extractors = append(extractors, extractCallStatus)
 		} else {
 			extractors = append(extractors, returnEmptyString)
