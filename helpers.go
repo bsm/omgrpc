@@ -40,17 +40,14 @@ func InstrumentCallDuration(m openmetrics.HistogramFamily) stats.Handler {
 }
 
 // InstrumentActiveConns returns default stats.Handler to instrument number of active gRPC connections.
-// It populates all the labels empty (if any).
+// It populates no labels.
 func InstrumentActiveConns(m openmetrics.GaugeFamily) stats.Handler {
-	numLabel := len(m.Desc().Labels)
-
 	return ConnStatsHandler(func(conn *ConnStats) {
-		labels := make([]string, numLabel) // all empty, nothing to populate here
 		switch conn.Status {
 		case Connected:
-			m.With(labels...).Add(1)
+			m.With().Add(1)
 		case Disconnected:
-			m.With(labels...).Add(-1)
+			m.With().Add(-1)
 		}
 	})
 }
@@ -58,6 +55,10 @@ func InstrumentActiveConns(m openmetrics.GaugeFamily) stats.Handler {
 // ----------------------------------------------------------------------------
 
 func buildCallExtractors(labels []string) []func(*CallStats) string {
+	if len(labels) == 0 {
+		return nil
+	}
+
 	extractors := make([]func(*CallStats) string, 0, len(labels))
 	for _, l := range labels {
 		if strings.EqualFold(l, "method") {
@@ -72,6 +73,10 @@ func buildCallExtractors(labels []string) []func(*CallStats) string {
 }
 
 func extractCallLabels(extractors []func(*CallStats) string, call *CallStats) []string {
+	if len(extractors) == 0 {
+		return nil
+	}
+
 	values := make([]string, 0, len(extractors))
 	for _, extract := range extractors {
 		values = append(values, extract(call))
