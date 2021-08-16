@@ -8,28 +8,41 @@
 ```go
 import (
   "github.com/bsm/omgrpc"
+  "github.com/bsm/openmetrics"
   "google.golang.org/grpc"
 )
 
-func initGRPCServer(fooServer yourproto.FooServer) *grpc.Server {
+func initGRPCServer(
+  fooServer yourproto.FooServer,
+
+  callCount openmetrics.CounterFamily,      // with tags: "method", "status"
+  callDuration openmetrics.HistogramFamily, // with tags: "method", "status"
+  activeConns openmetrics.GaugeFamily,      // no tags
+) *grpc.Server {
   server := grpc.NewServer(
-    grpc.StatsHandler(omgrpc.DefaultCallStatsHandler(nil /* defaults to openmetrics.DefaultRegistry() */ )), // track grpc_call count + timings
-    grpc.StatsHandler(omgrpc.DefaultConnStatsHandler(nil)), // track grpc_active_conns
+    grpc.WithStats(omgrpc.InstrumentCallCount(callCount)),
+    grpc.WithStats(omgrpc.InstrumentCallDuration(callDuration)),
+    grpc.WithStats(omgrpc.InstrumentActiveConns(activeConns)),
   )
   yourproto.RegisterFooServer(server, fooServer)
   return server
 }
 
-func initGRPCClient(ctx context.Context, target string) (*grpc.Conn, error) {
+func initGRPCClient(
+  ctx context.Context,
+  target string,
+
+  callCount openmetrics.CounterFamily,      // with tags: "method", "status"
+  callDuration openmetrics.HistogramFamily, // with tags: "method", "status"
+  activeConns openmetrics.GaugeFamily,      // no tags
+) (*grpc.Conn, error) {
   conn, err := grpc.DialContext(
     ctx,
     target,
 
-    // same registry/same handler can be used for client connection
-    // as long as you run them in different processes
-    // so metrics do not overlap:
-    grpc.StatsHandler(omgrpc.DefaultCallStatsHandler(nil)), // track grpc_call count + timings
-    grpc.StatsHandler(omgrpc.DefaultConnStatsHandler(nil)), // track grpc_active_conns
+    grpc.WithStatsHandler(omgrpc.InstrumentCallCount(callCount)),
+    grpc.WithStatsHandler(omgrpc.InstrumentCallDuration(callDuration)),
+    grpc.WithStatsHandler(omgrpc.InstrumentActiveConns(activeConns)),
   )
   return conn
 }
