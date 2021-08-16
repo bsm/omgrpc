@@ -5,7 +5,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/bsm/openmetrics"
 	"google.golang.org/grpc/stats"
 )
 
@@ -50,32 +49,6 @@ func getConnStats(ctx context.Context) *ConnStats {
 //
 // It assumes that stats.Handler methods are never called concurrently.
 type ConnStatsHandler func(*ConnStats)
-
-// NewDefaultConnStatsHandler builds a ConnStatsHandler that tracks default metrics.
-// It will default to openmetrics.DefaultRegistry() on nil.
-//
-//   - "grpc_active_conns" gauge with no labels
-//
-func NewDefaultConnStatsHandler(reg *openmetrics.Registry) ConnStatsHandler {
-	if reg == nil {
-		reg = openmetrics.DefaultRegistry()
-	}
-
-	activeConnGauge := reg.Gauge(openmetrics.Desc{
-		Name:   "grpc_active_conns",
-		Help:   "gRPC active connections gauge",
-		Labels: []string{},
-	})
-
-	return func(conn *ConnStats) {
-		switch conn.Status {
-		case Connected:
-			activeConnGauge.With().Add(1)
-		case Disconnected:
-			activeConnGauge.With().Add(-1)
-		}
-	}
-}
 
 // TagConn implements grpc/stats.Handler interface and does nothing.
 func (h ConnStatsHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context {
