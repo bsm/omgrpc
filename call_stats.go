@@ -27,6 +27,11 @@ type CallStats struct {
 	Error error // RPC call error, can be examined with s, _ := grpc/status.FromError(err); s.Code()
 }
 
+// Duration is a convenience method that returns RPC call duration.
+func (s *CallStats) Duration() time.Duration {
+	return s.EndTime.Sub(s.BeginTime)
+}
+
 var callStatsPool = sync.Pool{
 	New: func() interface{} {
 		return new(CallStats)
