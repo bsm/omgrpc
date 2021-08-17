@@ -37,7 +37,7 @@ func InstrumentCallDuration(m openmetrics.HistogramFamily) stats.Handler {
 
 	return CallStatsHandler(func(call *CallStats) {
 		labels := extractCallLabels(extractors, call)
-		m.With(labels...).Observe(float64(convertDuration(call.Duration())))
+		m.With(labels...).Observe(convertDuration(call.Duration()))
 	})
 }
 
