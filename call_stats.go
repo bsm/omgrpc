@@ -27,6 +27,11 @@ type CallStats struct {
 	Error error // RPC call error, can be examined with s, _ := grpc/status.FromError(err); s.Code()
 }
 
+// Duration is a convenience method that returns RPC call duration.
+func (s *CallStats) Duration() time.Duration {
+	return s.EndTime.Sub(s.BeginTime)
+}
+
 var callStatsPool = sync.Pool{
 	New: func() interface{} {
 		return new(CallStats)
@@ -51,9 +56,6 @@ func getCallStats(ctx context.Context) *CallStats {
 //
 // It assumes that stats.Handler methods are never called concurrently.
 type CallStatsHandler func(*CallStats)
-
-// TODO: make default call stats handler.
-// func NewDefaultCallStatsHandler(reg openmetrics.Registry) CallStatsHandler
 
 // TagRPC attaches omgrpc-internal data to RPC context.
 func (h CallStatsHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context {

@@ -50,9 +50,6 @@ func getConnStats(ctx context.Context) *ConnStats {
 // It assumes that stats.Handler methods are never called concurrently.
 type ConnStatsHandler func(*ConnStats)
 
-// TODO: default ConnStats handler tracking default metrics.
-// func NewDefaultConnStatsHandler(reg openmetrics.Registry) ConnStatsHandler
-
 // TagConn implements grpc/stats.Handler interface and does nothing.
 func (h ConnStatsHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context {
 	return ctx
