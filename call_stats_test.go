@@ -90,7 +90,7 @@ var _ = Describe("CallStatsHandler", func() {
 		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Unary"))
 		Expect(s.IsClientStream).To(BeFalse())
 		Expect(s.IsServerStream).To(BeFalse())
-		Expect(s.BytesRecv).To(Equal(53))
+		Expect(s.BytesRecv).To(Equal(15))
 		Expect(s.BytesSent).To(Equal(8))
 		Expect(s.Error).To(BeNil())
 
@@ -100,7 +100,7 @@ var _ = Describe("CallStatsHandler", func() {
 		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream"))
 		Expect(s.IsClientStream).To(BeTrue())
 		Expect(s.IsServerStream).To(BeTrue())
-		Expect(s.BytesRecv).To(Equal(36))
+		Expect(s.BytesRecv).To(Equal(32))
 		Expect(s.BytesSent).To(Equal(16))
 		// basically, clientClose affects Client first, and only then Server, so we get this:
 		Expect(s.Error).To(MatchError(ContainSubstring("grpc: the client connection is closing")))
@@ -120,7 +120,7 @@ var _ = Describe("CallStatsHandler", func() {
 		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Unary"))
 		Expect(s.IsClientStream).To(BeFalse())
 		Expect(s.IsServerStream).To(BeFalse())
-		Expect(s.BytesRecv).To(Equal(94))
+		Expect(s.BytesRecv).To(Equal(8))
 		Expect(s.BytesSent).To(Equal(15))
 		Expect(s.Error).To(BeNil())
 
@@ -130,7 +130,7 @@ var _ = Describe("CallStatsHandler", func() {
 		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream"))
 		Expect(s.IsClientStream).To(BeTrue())
 		Expect(s.IsServerStream).To(BeTrue())
-		Expect(s.BytesRecv).To(Equal(64))
+		Expect(s.BytesRecv).To(Equal(16))
 		Expect(s.BytesSent).To(Equal(32))
 		Expect(s.Error).To(BeNil())
 	})
