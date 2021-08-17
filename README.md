@@ -36,7 +36,7 @@ func initGRPCClient(
   callDuration openmetrics.HistogramFamily, // with tags: "method", "status"
   activeConns openmetrics.GaugeFamily,      // no tags
 ) (*grpc.Conn, error) {
-  conn, err := grpc.DialContext(
+  return grpc.DialContext(
     ctx,
     target,
 
@@ -44,6 +44,5 @@ func initGRPCClient(
     grpc.WithStatsHandler(omgrpc.InstrumentCallDuration(callDuration)),
     grpc.WithStatsHandler(omgrpc.InstrumentActiveConns(activeConns)),
   )
-  return conn
 }
 ```
