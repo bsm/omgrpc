@@ -29,7 +29,7 @@ var _ = Describe("ConnStatsHandler", func() {
 		serverConnStats = serverConnStats[:0]
 
 		subject = ConnStatsHandler(func(conn *ConnStats) {
-			if conn.Client {
+			if conn.IsClient {
 				clientConnStats = append(clientConnStats, *conn)
 			} else {
 				serverConnStats = append(serverConnStats, *conn)
@@ -66,7 +66,7 @@ var _ = Describe("ConnStatsHandler", func() {
 
 		// Client connect:
 		s = clientConnStats[0]
-		Expect(s.Client).To(BeTrue())
+		Expect(s.IsClient).To(BeTrue())
 		Expect(s.Status).To(Equal(Connected))
 		Expect(s.BytesRecv).To(BeZero()) // supported only server-side
 		Expect(s.BytesSent).To(BeZero()) // supported only server-side
@@ -77,21 +77,21 @@ var _ = Describe("ConnStatsHandler", func() {
 
 		// Client disconnect:
 		s = clientConnStats[1]
-		Expect(s.Client).To(BeTrue())
+		Expect(s.IsClient).To(BeTrue())
 		Expect(s.Status).To(Equal(Disconnected))
 		Expect(s.BytesRecv).To(BeZero()) // supported only server-side
 		Expect(s.BytesSent).To(BeZero()) // supported only server-side
 
 		// Server connect:
 		s = serverConnStats[0]
-		Expect(s.Client).To(BeFalse())
+		Expect(s.IsClient).To(BeFalse())
 		Expect(s.Status).To(Equal(Connected))
 		Expect(s.BytesRecv).To(BeZero()) // obviously, basically just checking that it's cleaned on pooling
 		Expect(s.BytesSent).To(BeZero()) // obviously, basically just checking that it's cleaned on pooling
 
 		// Server disconnect:
 		s = serverConnStats[1]
-		Expect(s.Client).To(BeFalse())
+		Expect(s.IsClient).To(BeFalse())
 		Expect(s.Status).To(Equal(Disconnected))
 		Expect(s.BytesRecv).To(Equal(109))
 		Expect(s.BytesSent).To(Equal(30))

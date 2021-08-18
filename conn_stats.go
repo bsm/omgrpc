@@ -18,8 +18,8 @@ const (
 
 // ConnStats holds connection stats.
 type ConnStats struct {
-	Client bool // indicates client-side stats
-	Status ConnStatus
+	IsClient bool // indicates client-side stats
+	Status   ConnStatus
 
 	LocalAddr, RemoteAddr net.Addr
 	BytesRecv, BytesSent  int // supported only for server side, only when Connected=false
@@ -98,7 +98,7 @@ func (h ConnStatsHandler) HandleConn(ctx context.Context, stat stats.ConnStats) 
 	switch s := stat.(type) {
 	case *stats.ConnBegin:
 		conn.Status = Connected
-		conn.Client = s.Client
+		conn.IsClient = s.Client
 		h(conn)
 
 	case *stats.ConnEnd:

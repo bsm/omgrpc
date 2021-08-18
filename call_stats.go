@@ -13,7 +13,7 @@ import (
 // CallStats holds all the RPC call-related data
 // that can be collected by stats handler.
 type CallStats struct {
-	Client   bool // indicates client-side stats
+	IsClient bool // indicates client-side stats
 	FailFast bool // only valid for client
 
 	FullMethodName                 string
@@ -75,7 +75,7 @@ func (h CallStatsHandler) HandleRPC(ctx context.Context, stat stats.RPCStats) {
 	switch s := stat.(type) {
 
 	case *stats.Begin:
-		call.Client = s.Client
+		call.IsClient = s.Client
 		call.BeginTime = s.BeginTime
 		call.IsClientStream = s.IsClientStream
 		call.IsServerStream = s.IsServerStream

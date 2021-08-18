@@ -30,7 +30,7 @@ var _ = Describe("CallStatsHandler", func() {
 		serverCallStats = serverCallStats[:0]
 
 		subject = CallStatsHandler(func(call *CallStats) {
-			if call.Client {
+			if call.IsClient {
 				clientCallStats = append(clientCallStats, *call)
 			} else {
 				serverCallStats = append(serverCallStats, *call)
@@ -86,7 +86,7 @@ var _ = Describe("CallStatsHandler", func() {
 
 		// client Unary:
 		s = clientCallStats[0]
-		Expect(s.Client).To(BeTrue())
+		Expect(s.IsClient).To(BeTrue())
 		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Unary"))
 		Expect(s.IsClientStream).To(BeFalse())
 		Expect(s.IsServerStream).To(BeFalse())
@@ -96,7 +96,7 @@ var _ = Describe("CallStatsHandler", func() {
 
 		// client Stream:
 		s = clientCallStats[1]
-		Expect(s.Client).To(BeTrue())
+		Expect(s.IsClient).To(BeTrue())
 		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream"))
 		Expect(s.IsClientStream).To(BeTrue())
 		Expect(s.IsServerStream).To(BeTrue())
@@ -116,7 +116,7 @@ var _ = Describe("CallStatsHandler", func() {
 
 		// server Unary:
 		s = serverCallStats[0]
-		Expect(s.Client).To(BeFalse())
+		Expect(s.IsClient).To(BeFalse())
 		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Unary"))
 		Expect(s.IsClientStream).To(BeFalse())
 		Expect(s.IsServerStream).To(BeFalse())
@@ -126,7 +126,7 @@ var _ = Describe("CallStatsHandler", func() {
 
 		// server Stream:
 		s = serverCallStats[1]
-		Expect(s.Client).To(BeFalse())
+		Expect(s.IsClient).To(BeFalse())
 		Expect(s.FullMethodName).To(Equal("/com.blacksquaremedia.omgrpc.internal.testpb.Test/Stream"))
 		Expect(s.IsClientStream).To(BeTrue())
 		Expect(s.IsServerStream).To(BeTrue())
