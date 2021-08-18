@@ -6,7 +6,6 @@ import (
 
 	"github.com/bsm/openmetrics"
 	"google.golang.org/grpc/stats"
-	"google.golang.org/grpc/status"
 )
 
 // InstrumentCallCount returns default stats.Handler to instrument RPC call count.
@@ -91,8 +90,7 @@ func extractCallMethod(call *CallStats) string {
 }
 
 func extractCallStatus(call *CallStats) string {
-	s, _ := status.FromError(call.Error) // returns Unknown status instead of nil
-	return s.Code().String()
+	return call.Code().String()
 }
 
 func returnEmptyString(*CallStats) string {

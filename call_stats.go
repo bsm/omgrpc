@@ -6,8 +6,10 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/stats"
+	"google.golang.org/grpc/status"
 )
 
 // CallStats holds all the RPC call-related data
@@ -30,6 +32,11 @@ type CallStats struct {
 // Duration is a convenience method that returns RPC call duration.
 func (s *CallStats) Duration() time.Duration {
 	return s.EndTime.Sub(s.BeginTime)
+}
+
+// Code is a convenience method / shortcut to return RPC status code.
+func (s *CallStats) Code() codes.Code {
+	return status.Code(s.Error)
 }
 
 var callStatsPool = sync.Pool{
